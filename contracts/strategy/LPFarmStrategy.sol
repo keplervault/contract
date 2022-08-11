@@ -20,10 +20,13 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    event Harvest(uint256 token0Amount, uint256 token1Amount, uint256  farmRewardAmount);
-    event Sweep(address token, address recipient, uint256 amount);
+    event Harvest(uint256 indexed token0Amount, uint256 indexed token1Amount, uint256  indexed farmRewardAmount);
+    event Sweep(address indexed token, address indexed recipient, uint256 amount);
     event SetOperator(address indexed user, bool allow );
-    
+    event SetDispatcher(address indexed dispatcher);
+    event SetSwapLimit(uint256 swapLimit);
+    event SetPoolId(uint256 poolId);
+
     address public  lptoken;
     address public  router;
     address public  farm ;
@@ -42,6 +45,11 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
         _;
     }
     constructor(address _lptoken, address _farmRewardToken,  address _router, address _farm, address _dispatcher) {
+        require(_lptoken != address(0), "_lptoken is zero address");
+        require(_router != address(0), "_router is zero address");
+        require(_farm != address(0), "_farm is zero address");
+        require(_farmRewardToken != address(0), "_farmRewardToken is zero address");
+        require(_dispatcher != address(0), "_dispatcher is zero address");
         lptoken = _lptoken;
         router = _router;
         farm = _farm;
@@ -91,7 +99,7 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
         IPancakePair pair = IPancakePair(lptoken);
         uint256 balanceA =  IERC20(pair.token0()).balanceOf(address(this));
         uint256 balanceB =  IERC20(pair.token1()).balanceOf(address(this));
-        require(balanceA > 0 || balanceB > 0, "LPFarmStrategy: balanceA and balanceB are zero");
+        require(balanceA > 0 && balanceB > 0, "LPFarmStrategy: balanceA and balanceB are zero");
         (uint256 reserveA, uint256 reserveB) = getReserves(lptoken);
         uint256 timesOfA = reserveB.mul(balanceB).div(reserveA); //
         if(balanceA > timesOfA.add(swapLimit)) {
@@ -157,6 +165,7 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
     function setDispatcher(address _dispatcher) external override onlyDispatcher{
         require(_dispatcher != address(0), "LPFarmStrategy: ZERO_ADDRESS");
         dispatcher = _dispatcher;
+        emit SetDispatcher(dispatcher);
     }
 
     function setOperator(address user, bool allow) external override onlyDispatcher{
@@ -176,10 +185,12 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
 
     function setSwapLimit(uint256 _swapLimit) external onlyOperator {
        swapLimit = _swapLimit;
+       emit SetSwapLimit(swapLimit);
     }
 
     function setPoolId(uint256 _poolId) external onlyOperator {
         poolId = _poolId;
+        emit SetPoolId(poolId);
     }
 
     function approveTokenToRouter(address token,  uint256 amount) public onlyOperator{

@@ -12,16 +12,19 @@ contract Treasury is ReentrancyGuard,Context,IPuppetOfDispatcher, Ownable {
      
     using SafeERC20 for IERC20;
 
-    event Deposit(address user, uint256 amount);
-    event Withdraw(address recipient, uint256 amount);
-    event Sweep(address token, address recipient, uint256 amount);
+    event Deposit(address indexed user, uint256 amount);
+    event Withdraw(address indexed recipient, uint256 amount);
+    event Sweep(address indexed token, address indexed recipient, uint256 amount);
     event SetOperator(address indexed user, bool allow );
+    event SetDispatcher(address indexed dispatcher);
 
     address public token;
     address public dispatcher;
     mapping(address => bool) public operators;
 
     constructor(address _token, address _dispatcher) {
+        require(_token != address(0), "_token is zero address");
+        require(_dispatcher != address(0), "_dispatcher is zero address");
         token = _token;
         dispatcher = _dispatcher;
         operators[msg.sender] = true;
@@ -48,9 +51,9 @@ contract Treasury is ReentrancyGuard,Context,IPuppetOfDispatcher, Ownable {
          require(recipient != address(0), "Treasury: recipient is zero address");
          uint256 balanceOf = IERC20(token).balanceOf(address(this));
          if(balanceOf > 0) {
-             IERC20(token).safeTransfer(recipient, balanceOf);
+            IERC20(token).safeTransfer(recipient, balanceOf);
+            emit Withdraw(recipient, balanceOf);
          }
-         emit Withdraw(recipient, balanceOf);
     }
 
     function sweep(address stoken, address recipient) external onlyOperator{
@@ -64,6 +67,7 @@ contract Treasury is ReentrancyGuard,Context,IPuppetOfDispatcher, Ownable {
     function setDispatcher(address _dispatcher) external override onlyDispatcher {
         require(_dispatcher != address(0), "Treasury: dispatcher is zero address");
         dispatcher = _dispatcher;
+        emit SetDispatcher(dispatcher);
     }
 
     function setOperator(address user, bool allow) external override onlyDispatcher{

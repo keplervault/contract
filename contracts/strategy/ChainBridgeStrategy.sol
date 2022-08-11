@@ -19,7 +19,7 @@ contract ChainBridgeStrategy is Context, IChainBridgeStrategy,IPuppetOfDispatche
     
     event ReceiveFunds(address indexed sender, address indexed to, uint256 value);
     event SetOperator(address indexed user, bool allow );
-    
+    event SetDispatcher(address indexed dispatcher);
     modifier onlyOperator() {
         require(operators[msg.sender], "ChainBridgeStrategy:sender is not operator");
         _;
@@ -31,6 +31,8 @@ contract ChainBridgeStrategy is Context, IChainBridgeStrategy,IPuppetOfDispatche
     }
 
     constructor(address _receiveToken, address _dispatcher) {
+        require(_dispatcher != address(0), "_dispatcher is zero address");
+        require(_receiveToken != address(0), "_receiveToken is zero address");
         dispatcher = _dispatcher;
         receiveToken = _receiveToken;
         operators[msg.sender] = true;
@@ -67,6 +69,7 @@ contract ChainBridgeStrategy is Context, IChainBridgeStrategy,IPuppetOfDispatche
     function setDispatcher(address _dispatcher) external override onlyDispatcher{
         require(_dispatcher != address(0), "ChainBridgeStrategy: ZERO_ADDRESS");
         dispatcher = _dispatcher;
+        emit SetDispatcher(dispatcher);
     }
 
     function receiveFunds(address token, address to, uint256 amount) external onlyOperator {

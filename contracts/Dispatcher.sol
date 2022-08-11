@@ -18,15 +18,18 @@ import './interface/IReceiver.sol';
 contract Dispatcher is Ownable, ReentrancyGuard {
 
     event Dispatch(address strategy, uint256 token0Amount, uint256 token1Amount);
+    event SetOperator(address indexed user, bool allow );
+    event Sweep(address indexed stoken, address recipient);
+    event ChainBridgeToWithdrawalAccount(uint256 indexed pid, address indexed token, address indexed withdrawalAccount, uint256 amount);
+
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
-    uint256 public  percentageToWithdrawalAccount = 10000;
     uint256 public  maximumToWithdrawalAccount = ~uint256(0);
     address public  token0;
     address public token1;
     uint256 public tokenPoint0;
     uint256 public tokenPoint1;
-    Receiver[] public receivers; 
+    Receiver[] public receivers;
     mapping(address => bool) operators;
 
     struct Receiver {
@@ -42,6 +45,9 @@ contract Dispatcher is Ownable, ReentrancyGuard {
     }
 
     constructor(address _token0, address _token1) {
+        require(_token0 != address(0), "_token0 is zero address");
+        require(_token1 != address(0), "_token1 is zero address");
+        require(_token0 != _token1, "same token!");
         token0 = _token0;
         token1 = _token1;
         operators[_msgSender()] = true;  
@@ -49,6 +55,7 @@ contract Dispatcher is Ownable, ReentrancyGuard {
     
     function addReceiver(address to, uint8 receiverType, uint256 point0, uint256 point1) external onlyOwner{
         require(to != address(0), "Dispatcher: to is zero address");
+        require(receiverType == 0 || receiverType == 1 || receiverType == 2, "receiverType only allow 0,1,2");
         tokenPoint0 = tokenPoint0.add(point0);
         tokenPoint1 = tokenPoint1.add(point1);
         receivers.push(Receiver ({
@@ -66,13 +73,20 @@ contract Dispatcher is Ownable, ReentrancyGuard {
         receivers[index].point1 = point1;
     }
 
+    function removeReceiver(uint index) external onlyOwner {
+        require(index < receivers.length);
+        receivers[index] = receivers[receivers.length-1];
+        receivers.pop();
+    }
+
     function sweep(address stoken, address recipient) external onlyOwner {
-       require(stoken != address(0), "Dispatcher: stoken is zero address");
-       require(recipient != address(0), "Dispatcher: recipient is zero address");
-       uint256 balance = IERC20(stoken).balanceOf(address(this));
-       if(balance > 0) {
-           IERC20(stoken).safeTransfer(recipient, balance);
-       }
+        require(stoken != address(0), "Dispatcher: stoken is zero address");
+        require(recipient != address(0), "Dispatcher: recipient is zero address");
+        uint256 balance = IERC20(stoken).balanceOf(address(this));
+        if(balance > 0) {
+            IERC20(stoken).safeTransfer(recipient, balance);
+            emit Sweep(stoken, recipient);
+        }
     }
 
     /**
@@ -83,7 +97,6 @@ contract Dispatcher is Ownable, ReentrancyGuard {
         IERC20 token1C = IERC20(token1);
         uint256 token0Balance = token0C.balanceOf(address(this));
         uint256 token1Balance = token1C.balanceOf(address(this));
-        require(token0Balance > 0 || token1Balance > 0, "Dispatcher: balanceOf is zero ");
         for (uint256 i = 0; i< receivers.length; i++) {
             Receiver memory s = receivers[i];
             if (s.point0 == 0 && s.point1 ==0) continue;
@@ -107,6 +120,7 @@ contract Dispatcher is Ownable, ReentrancyGuard {
     function setOperator(address user, bool allow) external onlyOwner{
         require(user != address(0), "Dispatcher: ZERO_ADDRESS");
         operators[user] = allow;
+        emit SetOperator(user, allow);
     }
 
     /**
@@ -136,11 +150,6 @@ contract Dispatcher is Ownable, ReentrancyGuard {
         maximumToWithdrawalAccount = _maximumToWithdrawalAccount;
     }
     
-    function setPercentageToWithdrawalAccount(uint256 _percentageToWithdrawalAccount) external onlyOwner {
-        require(_percentageToWithdrawalAccount <= 10000, "Dispatcher: _percentageToWithdrawalAccount error");
-        percentageToWithdrawalAccount = _percentageToWithdrawalAccount;
-    }
-
     function receiverWithdraw(uint256 pid, uint256 leaveAmount) external onlyOperator {
         Receiver memory s = receivers[pid];
         IReceiver(s.to).withdrawToDispatcher(leaveAmount);
@@ -157,15 +166,15 @@ contract Dispatcher is Ownable, ReentrancyGuard {
     }
 
     function chainBridgeToWithdrawalAccount(uint256 pid, address token, address withdrawalAccount) external onlyOperator {
-         Receiver memory s = receivers[pid];
-         require(s.receiverType == 1, "Dispatcher: not chainBridge");
-         uint256 amount = IChainBridgeStrategy(s.to).harvest(token);
-         require(amount > 0, "Dispatcher: amount is zero");
-         amount = amount.mul(percentageToWithdrawalAccount).div(10000);
-         if (amount > maximumToWithdrawalAccount) {
-             amount = maximumToWithdrawalAccount;
-         }
-         IERC20(token).safeTransfer(withdrawalAccount, amount);
+        Receiver memory s = receivers[pid];
+        require(s.receiverType == 1, "Dispatcher: not chainBridge");
+        uint256 amount = IChainBridgeStrategy(s.to).harvest(token);
+        require(amount > 0, "Dispatcher: amount is zero");
+        if (amount > maximumToWithdrawalAccount) {
+            amount = maximumToWithdrawalAccount;
+        }
+        IERC20(token).safeTransfer(withdrawalAccount, amount);
+        emit ChainBridgeToWithdrawalAccount(pid, token, withdrawalAccount, amount);
     }
     
 }

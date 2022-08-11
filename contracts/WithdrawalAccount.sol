@@ -5,20 +5,23 @@ import '@openzeppelin/contracts/access/Ownable.sol';
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
+import '@openzeppelin/contracts/access/Ownable.sol';
+
 import './interface/IPuppetOfDispatcher.sol';
 import './interface/IReceiver.sol';
-
 contract WithdrawalAccount is Context, ReentrancyGuard, IPuppetOfDispatcher,IReceiver, Ownable {
     using SafeERC20 for IERC20;
 
-    event Withdrawal(address user, uint256 amount);
-    event Sweep(address token, address recipient, uint256 amount);
+    event Withdrawal(address indexed user, uint256 amount);
+    event Sweep(address indexed token, address indexed recipient, uint256 amount);
     event SetOperator(address indexed user, bool allow );
+    event SetDispatcher(address indexed dispatcher);
+    event WithdrawToDispatcher(address indexed dispatcher, uint256 balanceOf);
 
     address public token;
     address public dispatcher;
     mapping(address => bool) public operators;
-    uint256 constant public MAX_WITHDRAWAL = 2* 10 ** 5 * 10 ** 18;
+    uint256 constant public MAX_WITHDRAWAL = 200000 * 10 ** 18;
     
     modifier onlyOperator() {
         require(operators[_msgSender()], "WithdrawalAccount: sender is not operator");
@@ -53,6 +56,7 @@ contract WithdrawalAccount is Context, ReentrancyGuard, IPuppetOfDispatcher,IRec
     function setDispatcher(address _dispatcher) external override onlyDispatcher{
         require(_dispatcher != address(0), "WithdrawalAccount: ZERO_ADDRESS");
         dispatcher = _dispatcher;
+        emit SetDispatcher(dispatcher);
     }
 
     function sweep(address stoken, address recipient) external onlyOperator{
@@ -69,8 +73,9 @@ contract WithdrawalAccount is Context, ReentrancyGuard, IPuppetOfDispatcher,IRec
     }
 
     function withdrawToDispatcher(uint256 leaveAmount) external override  onlyDispatcher  {
-        require(leaveAmount > 0, "WithdrawalAccount: leaveAmount is zero");
+        require(leaveAmount > 0, "WithdrawalAccount: Insufficient balance");
         IERC20(token).safeTransfer(dispatcher, leaveAmount);
+        emit WithdrawToDispatcher(dispatcher, leaveAmount);
     }
 
    function totalAmount() external override view returns(uint256) {
