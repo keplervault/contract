@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity 0.8.1;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -26,13 +26,15 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
     event SetDispatcher(address indexed dispatcher);
     event SetSwapLimit(uint256 swapLimit);
     event SetPoolId(uint256 poolId);
+    event SetWaitTime(uint256 time);
 
-    address public  lptoken;
-    address public  router;
-    address public  farm ;
-    address public  farmRewardToken ;
+    address immutable public  lptoken;
+    address immutable public  router;
+    address immutable public  farm ;
+    address immutable public  farmRewardToken ;
     uint256 public swapLimit = 1e3;
     uint256 public poolId = 0;
+    uint256 public waitTime = 300;
     address public dispatcher;
     mapping(address => bool) public operators;
 
@@ -65,7 +67,7 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
          IPancakeFarm pancakeFarm = IPancakeFarm(farm);
          pancakeFarm.withdraw(poolId, leaveAmount);
          IPancakePair pair = IPancakePair(lptoken);
-         IPancakeRouter(router).removeLiquidity(pair.token0(), pair.token1(), leaveAmount, 0, 0, dispatcher, block.timestamp.add(300)); 
+         IPancakeRouter(router).removeLiquidity(pair.token0(), pair.token1(), leaveAmount, 0, 0, dispatcher, block.timestamp.add(waitTime)); 
          harvest();
     }
 
@@ -81,7 +83,7 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
           address[] memory path = new address[](2);
           path[0] = farmRewardToken;
           path[1] = pair.token0();
-          IPancakeRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(balance, 0 ,path, address(this), block.timestamp.add(300));
+          IPancakeRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(balance, 0 ,path, address(this), block.timestamp.add(waitTime));
         }
         uint256 balanceA = IERC20(pair.token0()).balanceOf(address(this));
         if(balanceA > 0) {
@@ -99,7 +101,7 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
         IPancakePair pair = IPancakePair(lptoken);
         uint256 balanceA =  IERC20(pair.token0()).balanceOf(address(this));
         uint256 balanceB =  IERC20(pair.token1()).balanceOf(address(this));
-        require(balanceA > 0 && balanceB > 0, "LPFarmStrategy: balanceA and balanceB are zero");
+        require(balanceA > 0 || balanceB > 0, "LPFarmStrategy: balanceA and balanceB are zero");
         (uint256 reserveA, uint256 reserveB) = getReserves(lptoken);
         uint256 timesOfA = reserveB.mul(balanceB).div(reserveA); //
         if(balanceA > timesOfA.add(swapLimit)) {
@@ -111,7 +113,7 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
                 amountAOptimal = quote(balanceB, reserveB, reserveA);
             }
             uint256 swapAmount = balanceA.sub(amountAOptimal).div(2);
-            IPancakeRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(swapAmount, 0 ,path, address(this), block.timestamp.add(300));
+            IPancakeRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(swapAmount, 0 ,path, address(this), block.timestamp.add(waitTime));
         } else if(timesOfA > balanceA.add(swapLimit)) {
             address[] memory path = new address[](2);
             path[0] = pair.token1();
@@ -121,11 +123,11 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
                 amountBOptimal = quote(balanceA, reserveA, reserveB);
             }
             uint256 swapAmount = balanceB.sub(amountBOptimal).div(2);
-            IPancakeRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(swapAmount, 0 ,path, address(this), block.timestamp.add(300));
+            IPancakeRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(swapAmount, 0 ,path, address(this), block.timestamp.add(waitTime));
         }
         balanceA = IERC20(pair.token0()).balanceOf(address(this));
         balanceB = IERC20(pair.token1()).balanceOf(address(this));
-        IPancakeRouter(router).addLiquidity(pair.token0(), pair.token1(), balanceA, balanceB, 0, 0, address(this), block.timestamp.add(300));
+        IPancakeRouter(router).addLiquidity(pair.token0(), pair.token1(), balanceA, balanceB, 0, 0, address(this), block.timestamp.add(waitTime));
         IPancakeFarm(farm).deposit(poolId, pair.balanceOf(address(this)));
     }
 
@@ -191,6 +193,11 @@ contract LPFarmStrategy is  ReentrancyGuard, Context, IStrategy, IPuppetOfDispat
     function setPoolId(uint256 _poolId) external onlyOperator {
         poolId = _poolId;
         emit SetPoolId(poolId);
+    }
+
+    function setWaitTime(uint256 time) external onlyOperator {
+        waitTime = time;
+        emit SetWaitTime(time);
     }
 
     function approveTokenToRouter(address token,  uint256 amount) public onlyOperator{

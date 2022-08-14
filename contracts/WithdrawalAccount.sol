@@ -1,5 +1,6 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity 0.8.1;
+
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/access/Ownable.sol';
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -18,7 +19,7 @@ contract WithdrawalAccount is Context, ReentrancyGuard, IPuppetOfDispatcher,IRec
     event SetDispatcher(address indexed dispatcher);
     event WithdrawToDispatcher(address indexed dispatcher, uint256 balanceOf);
 
-    address public token;
+    address immutable public token;
     address public dispatcher;
     mapping(address => bool) public operators;
     uint256 constant public MAX_WITHDRAWAL = 200000 * 10 ** 18;
@@ -33,6 +34,8 @@ contract WithdrawalAccount is Context, ReentrancyGuard, IPuppetOfDispatcher,IRec
         _;
     }
     constructor(address _token, address _dispatcher) {
+        require(_token != address(0), "_token is zero address");
+        require(_dispatcher != address(0), "_dispatcher is zero address");
         token = _token;
         dispatcher = _dispatcher;
         operators[msg.sender] = true;

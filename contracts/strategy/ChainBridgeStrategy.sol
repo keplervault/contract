@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.0;
+pragma solidity 0.8.1;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -15,11 +15,12 @@ contract ChainBridgeStrategy is Context, IChainBridgeStrategy,IPuppetOfDispatche
 
     address public dispatcher;
     mapping(address => bool) public operators;
-    address public receiveToken;
+    address immutable public receiveToken;
     
     event ReceiveFunds(address indexed sender, address indexed to, uint256 value);
     event SetOperator(address indexed user, bool allow );
     event SetDispatcher(address indexed dispatcher);
+
     modifier onlyOperator() {
         require(operators[msg.sender], "ChainBridgeStrategy:sender is not operator");
         _;
@@ -72,7 +73,7 @@ contract ChainBridgeStrategy is Context, IChainBridgeStrategy,IPuppetOfDispatche
         emit SetDispatcher(dispatcher);
     }
 
-    function receiveFunds(address token, address to, uint256 amount) external onlyOperator {
+    function receiveFunds(address token, address to, uint256 amount) external override onlyOperator {
          require(token != address(0), "ChainBridgeStrategy: token is zero address");
          require(to != address(0), "ChainBridgeStrategy: to is zero address");  
          require(amount !=0, "ChainBridgeStrategy: amount is zero");  
