@@ -21,6 +21,7 @@ contract Dispatcher is Ownable, ReentrancyGuard {
     event SetOperator(address indexed user, bool allow );
     event Sweep(address indexed stoken, address recipient);
     event ChainBridgeToWithdrawalAccount(uint256 indexed pid, address indexed token, address indexed withdrawalAccount, uint256 amount);
+    event ChainBridgeToTreasury(uint256 indexed pid, address indexed token, address indexed treasury, uint256 amount);
 
     using SafeERC20 for IERC20;
     using SafeMath for uint256;
@@ -126,16 +127,20 @@ contract Dispatcher is Ownable, ReentrancyGuard {
     /**
      * Transfer the funds from the deposit contract to Dispatcher
      */
-    function treasuryWithdraw(address from) external onlyOperator {
-        ITreasury(from).withdraw(address(this));
+    function treasuryInvest(address from) public onlyOperator {
+        ITreasury(from).invest(address(this));
     }
     
      /**
      * Transfer the funds from the deposit contract to Dispatcher
      */
-    function treasuryWithdrawAndDispatch(address from) external onlyOperator {
-        ITreasury(from).withdraw(address(this));
+    function treasuryInvestAndDispatch(address from) external onlyOperator {
+        ITreasury(from).invest(address(this));
         dispatch();
+    }
+
+    function treasurySetFee(address from, uint256 _fee) external onlyOwner {
+        ITreasury(from).setFee(_fee);
     }
 
     function setPuppetDispatcher(address contractAddress, address from) external onlyOwner {
@@ -175,6 +180,18 @@ contract Dispatcher is Ownable, ReentrancyGuard {
         }
         IERC20(token).safeTransfer(withdrawalAccount, amount);
         emit ChainBridgeToWithdrawalAccount(pid, token, withdrawalAccount, amount);
+    }
+
+    function chainBridgeToTreasury(uint256 pid, address token, address treasury) external onlyOperator {
+        Receiver memory s = receivers[pid];
+        require(s.receiverType == 1, "Dispatcher: not chainBridge");
+        uint256 amount = IChainBridgeStrategy(s.to).harvest(token);
+        require(amount > 0, "Dispatcher: amount is zero");
+        if (amount > maximumToWithdrawalAccount) {
+            amount = maximumToWithdrawalAccount;
+        }
+        IERC20(token).safeTransfer(treasury, amount);
+        emit ChainBridgeToTreasury(pid, token, treasury, amount);
     }
     
 }
